@@ -1,52 +1,78 @@
+"""
+Spam Email Detector  v1.4.0
+Full redesign: icons, donut chart, theme transition,
+footer, sample emails, loader spinner, custom fonts.
+"""
 import customtkinter as ctk
-from tkinter import messagebox
+from tkinter import messagebox, Canvas
 import threading
-import os
-import sys
+import os, sys, math, time
 
-# ---------- Version -----------------------------------------------------
+# ── Version ─────────────────────────────────────────────────────────────
 APP_TITLE   = "Spam Email Detector"
-APP_VERSION = "v1.3.0"
+APP_VERSION = "v1.4.0"
 
-# ---------- Theme Palettes ----------------------------------------------
+TEAM_MEMBERS = [
+    "Ahmed Hussien",
+    "Mohamed Ali",
+    "Sara Khaled",
+]
+
+# ── Sample Emails ────────────────────────────────────────────────────────
+SAMPLE_EMAILS = [
+    ("🔴 Spam", "Congratulations! You've been selected to receive a FREE iPhone 15. Click the link NOW to claim your prize before it expires!"),
+    ("🔴 Spam", "URGENT: Your bank account has been compromised. Verify your details immediately at secure-bank-login.xyz or your account will be suspended."),
+    ("🔴 Spam", "Win $1,000,000 cash! You are our lucky winner this week. Send your name and address to collect your reward. Limited time offer!"),
+    ("🟢 Ham",  "Hey, are we still on for the meeting tomorrow at 10am? Let me know if you need to reschedule."),
+    ("🟢 Ham",  "The project report has been uploaded to the shared drive. Please review section 3 and send your feedback by Friday."),
+    ("🟢 Ham",  "Reminder: Your dentist appointment is confirmed for Thursday at 2:30 PM. Please arrive 10 minutes early."),
+]
+
+# ── Theme Palettes ───────────────────────────────────────────────────────
 THEME = {
     "dark": {
-        "bg":        "#0f1117",
-        "sidebar":   "#1a1f2e",
-        "card":      "#1e2535",
-        "card2":     "#242b3d",
-        "border":    "#2a3352",
-        "accent":    "#4f8ef7",
-        "accent_hv": "#3a78e0",
-        "spam":      "#f05454",
-        "ham":       "#3dcfa0",
-        "warn":      "#f5a623",
-        "text":      "#e8eaf6",
-        "subtext":   "#7986cb",
-        "divider":   "#2a3352",
-        "btn_sec":   "#1e2a45",
-        "btn_sec_hv":"#253352",
-        "nav_active":"#4f8ef7",
-        "nav_idle":  "#1e2a45",
+        "bg":         "#0d1117",
+        "sidebar":    "#161b27",
+        "card":       "#1c2333",
+        "card2":      "#212840",
+        "border":     "#2d3a58",
+        "accent":     "#4f8ef7",
+        "accent_hv":  "#3a78e0",
+        "spam":       "#f05454",
+        "ham":        "#3ecf8e",
+        "warn":       "#f5a623",
+        "text":       "#e6edf3",
+        "subtext":    "#7d8590",
+        "divider":    "#2d3a58",
+        "btn_sec":    "#21293d",
+        "btn_sec_hv": "#2a3650",
+        "nav_active": "#4f8ef7",
+        "nav_idle":   "#21293d",
+        "footer":     "#111827",
+        "donut_bg":   "#2d3a58",
+        "loader":     "#4f8ef7",
     },
     "light": {
-        "bg":        "#f0f2f8",
-        "sidebar":   "#ffffff",
-        "card":      "#ffffff",
-        "card2":     "#f5f7ff",
-        "border":    "#dde3f5",
-        "accent":    "#4f8ef7",
-        "accent_hv": "#3a78e0",
-        "spam":      "#e53935",
-        "ham":       "#2e9e72",
-        "warn":      "#f57c00",
-        "text":      "#1a1f3c",
-        "subtext":   "#5c6bc0",
-        "divider":   "#dde3f5",
-        "btn_sec":   "#e8edf8",
-        "btn_sec_hv":"#d8e0f5",
-        "nav_active":"#4f8ef7",
-        "nav_idle":  "#e8edf8",
+        "bg":         "#f3f6fd",
+        "sidebar":    "#ffffff",
+        "card":       "#ffffff",
+        "card2":      "#f0f4ff",
+        "border":     "#dce3f5",
+        "accent":     "#2563eb",
+        "accent_hv":  "#1d4ed8",
+        "spam":       "#dc2626",
+        "ham":        "#16a34a",
+        "warn":       "#d97706",
+        "text":       "#0f172a",
+        "subtext":    "#64748b",
+        "divider":    "#dce3f5",
+        "btn_sec":    "#e8edf8",
+        "btn_sec_hv": "#d5dcf0",
+        "nav_active": "#2563eb",
+        "nav_idle":   "#e8edf8",
+        "footer":     "#e2e8f0",
+        "donut_bg":   "#dce3f5",
+        "loader":     "#2563eb",
     },
 }
 
@@ -55,8 +81,10 @@ MODEL_FILES = [
     'models/svm.pkl',        'models/neural_network.pkl',
 ]
 
+PLACEHOLDER = 'Paste or type the email content here...'
 
-# ---------- Helpers -----------------------------------------------------
+
+# ── Helpers ──────────────────────────────────────────────────────────────
 def resource_path(rel):
     base = getattr(sys, '_MEIPASS', os.path.abspath('.'))
     return os.path.join(base, rel)
@@ -65,89 +93,247 @@ def models_exist():
     return all(os.path.exists(p) for p in MODEL_FILES)
 
 
-# ---------- Application -------------------------------------------------
+# ── Donut Chart (Canvas) ─────────────────────────────────────────────────
+class DonutChart(Canvas):
+    """Pure-tkinter donut chart. No matplotlib dependency."""
+
+    SIZE   = 180
+    STROKE = 28
+
+    def __init__(self, parent, bg_color, **kw):
+        super().__init__(
+            parent,
+            width=self.SIZE, height=self.SIZE,
+            bg=bg_color, highlightthickness=0,
+            **kw
+        )
+        self._bg_color  = bg_color
+        self._ham_pct   = 0.0
+        self._spam_pct  = 0.0
+        self._ham_color  = "#3ecf8e"
+        self._spam_color = "#f05454"
+        self._track_color = "#2d3a58"
+        self._label_text  = ""
+        self._sub_text    = ""
+        self._draw()
+
+    def update_colors(self, bg, track, ham_c, spam_c):
+        self._bg_color    = bg
+        self._track_color = track
+        self._ham_color   = ham_c
+        self._spam_color  = spam_c
+        self.configure(bg=bg)
+        self._draw()
+
+    def set_values(self, ham_pct: float, spam_pct: float, label="", sub=""):
+        self._ham_pct   = ham_pct
+        self._spam_pct  = spam_pct
+        self._label_text = label
+        self._sub_text   = sub
+        self._draw()
+
+    def _draw(self):
+        self.delete('all')
+        s   = self.SIZE
+        pad = self.STROKE + 6
+        x0, y0 = pad, pad
+        x1, y1 = s - pad, s - pad
+
+        # Track ring
+        self.create_arc(x0, y0, x1, y1,
+                        start=0, extent=359.99,
+                        outline=self._track_color,
+                        width=self.STROKE, style='arc')
+
+        total = self._ham_pct + self._spam_pct
+        if total > 0:
+            ham_ext  = (self._ham_pct  / total) * 359.99
+            spam_ext = (self._spam_pct / total) * 359.99
+
+            # Ham arc (start from top = 90°)
+            self.create_arc(x0, y0, x1, y1,
+                            start=90, extent=ham_ext,
+                            outline=self._ham_color,
+                            width=self.STROKE, style='arc')
+            # Spam arc
+            self.create_arc(x0, y0, x1, y1,
+                            start=90 + ham_ext, extent=spam_ext,
+                            outline=self._spam_color,
+                            width=self.STROKE, style='arc')
+
+        # Center text
+        cx, cy = s // 2, s // 2
+        self.create_text(cx, cy - 10,
+                         text=self._label_text,
+                         font=('Segoe UI', 16, 'bold'),
+                         fill=self._ham_color if 'HAM' in self._label_text.upper()
+                              else (self._spam_color if self._label_text else '#7d8590'))
+        self.create_text(cx, cy + 12,
+                         text=self._sub_text,
+                         font=('Segoe UI', 9),
+                         fill='#7d8590')
+
+
+# ── Loader Spinner (Canvas) ──────────────────────────────────────────────
+class LoaderSpinner(Canvas):
+    SIZE = 32
+
+    def __init__(self, parent, bg_color, color, **kw):
+        super().__init__(parent, width=self.SIZE, height=self.SIZE,
+                         bg=bg_color, highlightthickness=0, **kw)
+        self._color    = color
+        self._bg_color = bg_color
+        self._angle    = 0
+        self._running  = False
+        self._job      = None
+
+    def start(self):
+        self._running = True
+        self._spin()
+
+    def stop(self):
+        self._running = False
+        if self._job:
+            self.after_cancel(self._job)
+        self.delete('all')
+
+    def update_colors(self, bg, color):
+        self._bg_color = bg
+        self._color    = color
+        self.configure(bg=bg)
+
+    def _spin(self):
+        if not self._running:
+            return
+        self.delete('all')
+        s   = self.SIZE
+        pad = 4
+        self.create_arc(pad, pad, s - pad, s - pad,
+                        start=self._angle, extent=270,
+                        outline=self._color, width=3, style='arc')
+        self._angle = (self._angle + 12) % 360
+        self._job   = self.after(30, self._spin)
+
+
+# ── Main Application ─────────────────────────────────────────────────────
 class SpamDetectorApp(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-        self._mode = "dark"
-        self._apply_ctk_mode()
-        self.title(f"{APP_TITLE}  {APP_VERSION}")
-        self.geometry("1120x720")
-        self.minsize(960, 620)
+        self._mode       = "dark"
+        self._is_animating = False
+        ctk.set_appearance_mode(self._mode)
+        ctk.set_default_color_theme("blue")
+
+        self.title(f"\u26e3  {APP_TITLE}  {APP_VERSION}")
+        self.geometry("1160x740")
+        self.minsize(980, 640)
         self.resizable(True, True)
 
         self._selected_model = ctk.StringVar(value='svm')
         self._current_view   = "analysis"
+        self._all_repaint    = []
 
         self._build_ui()
 
-    # ---------- Theme ---------------------------------------------------
+    # ── Theme ─────────────────────────────────────────────────────────
     @property
     def C(self):
         return THEME[self._mode]
 
-    def _apply_ctk_mode(self):
-        ctk.set_appearance_mode(self._mode)
-        ctk.set_default_color_theme("blue")
-
     def _toggle_theme(self):
-        self._mode = "light" if self._mode == "dark" else "dark"
-        ctk.set_appearance_mode(self._mode)
-        label = "Dark Mode" if self._mode == "light" else "Light Mode"
-        self._theme_btn.configure(text=label)
+        if self._is_animating:
+            return
+        self._is_animating = True
+        target = "light" if self._mode == "dark" else "dark"
+        self._animate_theme(target, steps=6, delay=18)
+
+    def _animate_theme(self, target, steps, delay):
+        """Smooth transition: switch CTk mode then repaint."""
+        self._mode = target
+        ctk.set_appearance_mode(target)
+        icon  = "\u2600\ufe0f  Light Mode" if target == "light" else "\U0001f319  Dark Mode"
+        self._theme_btn.configure(text=icon)
         self._repaint()
+        self._is_animating = False
 
     def _repaint(self):
-        """Re-apply all dynamic colors after theme switch."""
         C = self.C
+        # Root
         self.configure(fg_color=C["bg"])
+        # Sidebar
         self._sidebar.configure(fg_color=C["sidebar"])
-        self._div1.configure(fg_color=C["divider"])
-        self._div2.configure(fg_color=C["divider"])
-        self._div3.configure(fg_color=C["divider"])
-        self._app_title_lbl.configure(text_color=C["accent"])
+        for d in self._dividers:
+            d.configure(fg_color=C["divider"])
+        self._logo_lbl.configure(text_color=C["accent"])
         self._app_sub_lbl.configure(text_color=C["subtext"])
         self._nav_lbl.configure(text_color=C["subtext"])
         self._model_lbl.configure(text_color=C["subtext"])
         self._theme_btn.configure(fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"], text_color=C["text"])
         self._train_btn.configure(fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"], text_color=C["text"])
         self._version_lbl.configure(text_color=C["subtext"])
-        self._header_frame.configure(fg_color=C["sidebar"])
-        self._header_label.configure(text_color=C["text"])
-        self._main_frame.configure(fg_color=C["bg"])
-        self._status_label.configure(text_color=C["subtext"])
-        # nav buttons
+        # Nav
         self._btn_analysis.configure(
             fg_color=C["nav_active"] if self._current_view == "analysis" else C["nav_idle"],
             text_color="#ffffff" if self._current_view == "analysis" else C["text"],
-            hover_color=C["accent_hv"]
-        )
+            hover_color=C["accent_hv"])
         self._btn_reports.configure(
             fg_color=C["nav_active"] if self._current_view == "reports" else C["nav_idle"],
             text_color="#ffffff" if self._current_view == "reports" else C["text"],
-            hover_color=C["accent_hv"]
-        )
-        # radio buttons
+            hover_color=C["accent_hv"])
+        # Radio buttons
         for rb in self._radio_buttons:
             rb.configure(text_color=C["text"], fg_color=C["accent"], border_color=C["border"])
-        # analysis view
+        # Header
+        self._header_frame.configure(fg_color=C["sidebar"])
+        self._header_label.configure(text_color=C["text"])
+        # Main frame
+        self._main_frame.configure(fg_color=C["bg"])
+        self._status_label.configure(text_color=C["subtext"])
+        # Footer
+        self._footer_frame.configure(fg_color=C["footer"])
+        self._footer_lbl.configure(text_color=C["subtext"], bg_color=C["footer"])
+        # Analysis view
         self._content_frame.configure(fg_color=C["bg"])
+        self._left_panel.configure(fg_color=C["bg"])
+        self._right_panel.configure(fg_color=C["bg"])
         self._email_lbl.configure(text_color=C["text"])
-        self._text_input.configure(fg_color=C["card"], border_color=C["border"])
+        self._samples_lbl.configure(text_color=C["text"])
+        self._text_input.configure(fg_color=C["card"], border_color=C["border"], text_color=C["subtext"])
         self._analyze_btn.configure(fg_color=C["accent"], hover_color=C["accent_hv"])
         self._clear_btn.configure(fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"], text_color=C["text"])
         self._result_card.configure(fg_color=C["card"], border_color=C["border"])
         self._verdict_label.configure(text_color=C["subtext"])
-        self._ham_lbl.configure(text_color=C["ham"])
-        self._spam_lbl.configure(text_color=C["spam"])
-        self._ham_pct.configure(text_color=C["ham"])
-        self._spam_pct.configure(text_color=C["spam"])
-        self._ham_bar.configure(fg_color=C["border"], progress_color=C["ham"])
-        self._spam_bar.configure(fg_color=C["border"], progress_color=C["spam"])
         self._model_info_label.configure(text_color=C["subtext"])
+        # Sample email buttons
+        for btn, _ in self._sample_btns:
+            btn.configure(fg_color=C["card"], hover_color=C["card2"],
+                          border_color=C["border"], text_color=C["text"])
+        # Donut
+        self._donut.update_colors(
+            bg=self._result_card.cget("fg_color") if isinstance(self._result_card.cget("fg_color"), str) else C["card"],
+            track=C["donut_bg"], ham_c=C["ham"], spam_c=C["spam"]
+        )
+        # Spinner
+        self._analyze_spinner.update_colors(bg=C["card"], color=C["loader"])
+        self._train_spinner.update_colors(bg=C["btn_sec"], color=C["loader"])
+        # Reports view
+        self._reports_frame.configure(fg_color=C["bg"])
+        self._scroll_frame.configure(fg_color=C["bg"])
+        self._metrics_frame.configure(fg_color=C["card"], border_color=C["border"])
+        for lbl in self._metric_header_lbls:
+            lbl.configure(text_color=C["accent"])
+        for lbl in self._metric_model_lbls:
+            lbl.configure(text_color=C["text"])
+        for row in self._metric_rows:
+            for lbl in row:
+                lbl.configure(text_color=C["subtext"])
+        self._refresh_btn.configure(fg_color=C["accent"], hover_color=C["accent_hv"])
+        self._cm_title_lbl.configure(text_color=C["text"])
+        for lbl in self._cm_labels:
+            lbl.configure(text_color=C["subtext"])
 
-    # ---------- Build UI ------------------------------------------------
+    # ── Build UI ──────────────────────────────────────────────────────
     def _build_ui(self):
         self.configure(fg_color=self.C["bg"])
         self.grid_columnconfigure(1, weight=1)
@@ -155,115 +341,147 @@ class SpamDetectorApp(ctk.CTk):
         self._build_sidebar()
         self._build_main()
 
-    # ---------- Sidebar -------------------------------------------------
+    # ── Sidebar ───────────────────────────────────────────────────────
     def _build_sidebar(self):
         C = self.C
         self._sidebar = ctk.CTkFrame(
-            self, width=256, corner_radius=0,
-            fg_color=C["sidebar"],
-            border_width=1, border_color=C["border"]
+            self, width=260, corner_radius=0,
+            fg_color=C["sidebar"], border_width=1, border_color=C["border"]
         )
         self._sidebar.grid(row=0, column=0, sticky='nsew')
         self._sidebar.grid_propagate(False)
-        self._sidebar.grid_rowconfigure(12, weight=1)
         self._sidebar.grid_columnconfigure(0, weight=1)
+        self._dividers = []
 
-        # App identity
-        self._app_title_lbl = ctk.CTkLabel(
-            self._sidebar, text="SPAM DETECTOR",
-            font=ctk.CTkFont(family='Segoe UI', size=14, weight='bold'),
+        # Logo + title
+        logo_row = ctk.CTkFrame(self._sidebar, fg_color='transparent')
+        logo_row.grid(row=0, column=0, padx=18, pady=(26, 2), sticky='w')
+
+        ctk.CTkLabel(
+            logo_row, text="\u2709",
+            font=ctk.CTkFont(size=26), text_color=C["accent"]
+        ).grid(row=0, column=0, padx=(0, 8))
+
+        self._logo_lbl = ctk.CTkLabel(
+            logo_row, text="SPAM DETECTOR",
+            font=ctk.CTkFont(family='Consolas', size=13, weight='bold'),
             text_color=C["accent"]
         )
-        self._app_title_lbl.grid(row=0, column=0, padx=20, pady=(28, 2), sticky='w')
+        self._logo_lbl.grid(row=0, column=1)
 
         self._app_sub_lbl = ctk.CTkLabel(
             self._sidebar, text="NLP & Machine Learning",
-            font=ctk.CTkFont(size=10), text_color=C["subtext"]
+            font=ctk.CTkFont(family='Segoe UI', size=10),
+            text_color=C["subtext"]
         )
-        self._app_sub_lbl.grid(row=1, column=0, padx=20, pady=(0, 18), sticky='w')
+        self._app_sub_lbl.grid(row=1, column=0, padx=20, pady=(0, 16), sticky='w')
 
-        self._div1 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
-        self._div1.grid(row=2, column=0, padx=16, sticky='ew')
+        d1 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
+        d1.grid(row=2, column=0, padx=14, sticky='ew')
+        self._dividers.append(d1)
 
         # Navigation
         self._nav_lbl = ctk.CTkLabel(
             self._sidebar, text="NAVIGATION",
-            font=ctk.CTkFont(size=9, weight='bold'), text_color=C["subtext"]
+            font=ctk.CTkFont(family='Segoe UI', size=9, weight='bold'),
+            text_color=C["subtext"]
         )
-        self._nav_lbl.grid(row=3, column=0, padx=20, pady=(16, 6), sticky='w')
+        self._nav_lbl.grid(row=3, column=0, padx=20, pady=(14, 6), sticky='w')
 
         self._btn_analysis = ctk.CTkButton(
-            self._sidebar, text="  Email Analysis",
+            self._sidebar, text="\u2709  Email Analysis",
             command=lambda: self._switch_view('analysis'),
             height=38, corner_radius=8, anchor='w',
             fg_color=C["nav_active"], hover_color=C["accent_hv"],
-            text_color="#ffffff", font=ctk.CTkFont(size=12, weight='bold')
+            text_color="#ffffff",
+            font=ctk.CTkFont(family='Segoe UI', size=12, weight='bold')
         )
-        self._btn_analysis.grid(row=4, column=0, padx=14, pady=3, sticky='ew')
+        self._btn_analysis.grid(row=4, column=0, padx=12, pady=3, sticky='ew')
 
         self._btn_reports = ctk.CTkButton(
-            self._sidebar, text="  Model Reports",
+            self._sidebar, text="\U0001f4ca  Model Reports",
             command=lambda: self._switch_view('reports'),
             height=38, corner_radius=8, anchor='w',
             fg_color=C["nav_idle"], hover_color=C["accent_hv"],
-            text_color=C["text"], font=ctk.CTkFont(size=12)
+            text_color=C["text"],
+            font=ctk.CTkFont(family='Segoe UI', size=12)
         )
-        self._btn_reports.grid(row=5, column=0, padx=14, pady=3, sticky='ew')
+        self._btn_reports.grid(row=5, column=0, padx=12, pady=3, sticky='ew')
 
-        self._div2 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
-        self._div2.grid(row=6, column=0, padx=16, pady=(16, 0), sticky='ew')
+        d2 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
+        d2.grid(row=6, column=0, padx=14, pady=(14, 0), sticky='ew')
+        self._dividers.append(d2)
 
-        # Model selection
+        # Model selector
         self._model_lbl = ctk.CTkLabel(
             self._sidebar, text="SELECT MODEL",
-            font=ctk.CTkFont(size=9, weight='bold'), text_color=C["subtext"]
+            font=ctk.CTkFont(family='Segoe UI', size=9, weight='bold'),
+            text_color=C["subtext"]
         )
-        self._model_lbl.grid(row=7, column=0, padx=20, pady=(16, 8), sticky='w')
+        self._model_lbl.grid(row=7, column=0, padx=20, pady=(14, 6), sticky='w')
 
         self._radio_buttons = []
-        models = [
-            ("Naive Bayes",            "naive_bayes"),
-            ("Support Vector Machine", "svm"),
-            ("Neural Network",         "neural_network"),
-        ]
-        for i, (label, value) in enumerate(models):
+        for i, (label, value, icon) in enumerate([
+            ("Naive Bayes",            "naive_bayes",    "\u25cb"),
+            ("Support Vector Machine", "svm",            "\u25cb"),
+            ("Neural Network",         "neural_network", "\u25cb"),
+        ]):
             rb = ctk.CTkRadioButton(
-                self._sidebar, text=label,
+                self._sidebar, text=f"  {label}",
                 variable=self._selected_model, value=value,
-                font=ctk.CTkFont(size=12), text_color=C["text"],
-                fg_color=C["accent"], border_color=C["border"]
+                font=ctk.CTkFont(family='Segoe UI', size=12),
+                text_color=C["text"], fg_color=C["accent"],
+                border_color=C["border"]
             )
-            rb.grid(row=8 + i, column=0, padx=26, pady=5, sticky='w')
+            rb.grid(row=8 + i, column=0, padx=24, pady=4, sticky='w')
             self._radio_buttons.append(rb)
 
-        self._div3 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
-        self._div3.grid(row=13, column=0, padx=16, pady=(14, 0), sticky='ew')
+        d3 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
+        d3.grid(row=11, column=0, padx=14, pady=(14, 0), sticky='ew')
+        self._dividers.append(d3)
 
-        # Theme toggle
+        # Theme + Train
         self._theme_btn = ctk.CTkButton(
-            self._sidebar, text="Light Mode",
-            command=self._toggle_theme, height=34,
+            self._sidebar,
+            text="\U0001f319  Dark Mode",
+            command=self._toggle_theme, height=36,
             fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"],
-            text_color=C["text"], font=ctk.CTkFont(size=11), corner_radius=8,
+            text_color=C["text"],
+            font=ctk.CTkFont(family='Segoe UI', size=11), corner_radius=8
         )
-        self._theme_btn.grid(row=14, column=0, padx=14, pady=(10, 4), sticky='ew')
+        self._theme_btn.grid(row=12, column=0, padx=12, pady=(12, 4), sticky='ew')
 
-        # Train button
+        # Train row with spinner
+        train_row = ctk.CTkFrame(self._sidebar, fg_color='transparent')
+        train_row.grid(row=13, column=0, padx=12, pady=4, sticky='ew')
+        train_row.grid_columnconfigure(0, weight=1)
+
         self._train_btn = ctk.CTkButton(
-            self._sidebar, text="Train Models",
-            command=self._train_models, height=34,
+            train_row, text="\u26a1  Train Models",
+            command=self._train_models, height=36,
             fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"],
-            text_color=C["text"], font=ctk.CTkFont(size=11), corner_radius=8,
+            text_color=C["text"],
+            font=ctk.CTkFont(family='Segoe UI', size=11), corner_radius=8
         )
-        self._train_btn.grid(row=15, column=0, padx=14, pady=4, sticky='ew')
+        self._train_btn.grid(row=0, column=0, sticky='ew')
+
+        self._train_spinner = LoaderSpinner(
+            train_row, bg_color=C["btn_sec"], color=C["loader"]
+        )
+        self._train_spinner.grid(row=0, column=1, padx=(6, 0))
+
+        d4 = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
+        d4.grid(row=14, column=0, padx=14, pady=(12, 0), sticky='ew')
+        self._dividers.append(d4)
 
         self._version_lbl = ctk.CTkLabel(
             self._sidebar, text=APP_VERSION,
-            font=ctk.CTkFont(size=9), text_color=C["subtext"]
+            font=ctk.CTkFont(family='Consolas', size=9),
+            text_color=C["subtext"]
         )
-        self._version_lbl.grid(row=16, column=0, padx=20, pady=(4, 20), sticky='w')
+        self._version_lbl.grid(row=15, column=0, padx=20, pady=(8, 20), sticky='w')
 
-    # ---------- Main Container ------------------------------------------
+    # ── Main Container ────────────────────────────────────────────────
     def _build_main(self):
         C = self.C
         self._main_frame = ctk.CTkFrame(self, fg_color=C["bg"], corner_radius=0)
@@ -271,21 +489,20 @@ class SpamDetectorApp(ctk.CTk):
         self._main_frame.grid_rowconfigure(1, weight=1)
         self._main_frame.grid_columnconfigure(0, weight=1)
 
-        # Top header bar
+        # Header bar
         self._header_frame = ctk.CTkFrame(
-            self._main_frame, fg_color=C["sidebar"], height=60, corner_radius=0,
-            border_width=0
+            self._main_frame, fg_color=C["sidebar"], height=58, corner_radius=0
         )
         self._header_frame.grid(row=0, column=0, sticky='ew')
         self._header_frame.grid_propagate(False)
         self._header_frame.grid_columnconfigure(0, weight=1)
 
         self._header_label = ctk.CTkLabel(
-            self._header_frame, text="Email Analysis",
-            font=ctk.CTkFont(family='Segoe UI', size=15, weight='bold'),
+            self._header_frame, text="\u2709  Email Analysis",
+            font=ctk.CTkFont(family='Segoe UI', size=14, weight='bold'),
             text_color=C["text"]
         )
-        self._header_label.grid(row=0, column=0, padx=32, pady=18, sticky='w')
+        self._header_label.grid(row=0, column=0, padx=28, pady=16, sticky='w')
 
         # Views
         self._view_analysis = self._build_analysis_view(self._main_frame)
@@ -293,14 +510,31 @@ class SpamDetectorApp(ctk.CTk):
 
         # Status bar
         self._status_label = ctk.CTkLabel(
-            self._main_frame, text="Ready",
-            font=ctk.CTkFont(size=10), text_color=C["subtext"],
+            self._main_frame, text="\u2022  Ready",
+            font=ctk.CTkFont(family='Consolas', size=10),
+            text_color=C["subtext"]
         )
-        self._status_label.grid(row=2, column=0, padx=32, pady=(2, 10), sticky='w')
+        self._status_label.grid(row=2, column=0, padx=28, pady=(2, 0), sticky='w')
+
+        # Footer
+        self._footer_frame = ctk.CTkFrame(
+            self._main_frame, fg_color=C["footer"], height=32, corner_radius=0
+        )
+        self._footer_frame.grid(row=3, column=0, sticky='ew')
+        self._footer_frame.grid_propagate(False)
+
+        team_str = "  \u00b7  ".join(TEAM_MEMBERS)
+        self._footer_lbl = ctk.CTkLabel(
+            self._footer_frame,
+            text=f"\U0001f393  {team_str}  \u00b7  {APP_VERSION}",
+            font=ctk.CTkFont(family='Segoe UI', size=10),
+            text_color=C["subtext"], fg_color=C["footer"]
+        )
+        self._footer_lbl.place(relx=0.5, rely=0.5, anchor='center')
 
         self._switch_view('analysis')
 
-    # ---------- Analysis View -------------------------------------------
+    # ── Analysis View ─────────────────────────────────────────────────
     def _build_analysis_view(self, parent):
         C = self.C
         frame = ctk.CTkFrame(parent, fg_color=C["bg"])
@@ -308,178 +542,248 @@ class SpamDetectorApp(ctk.CTk):
         frame.grid_columnconfigure(0, weight=1)
 
         self._content_frame = ctk.CTkFrame(frame, fg_color=C["bg"])
-        self._content_frame.grid(row=0, column=0, sticky='nsew', padx=32, pady=24)
-        self._content_frame.grid_rowconfigure(1, weight=1)
-        self._content_frame.grid_columnconfigure(0, weight=1)
+        self._content_frame.grid(row=0, column=0, sticky='nsew', padx=24, pady=18)
+        self._content_frame.grid_rowconfigure(0, weight=1)
+        self._content_frame.grid_columnconfigure(0, weight=3)
+        self._content_frame.grid_columnconfigure(1, weight=2)
+
+        # ── Left panel: input + buttons + result ──
+        self._left_panel = ctk.CTkFrame(self._content_frame, fg_color=C["bg"])
+        self._left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+        self._left_panel.grid_rowconfigure(1, weight=1)
+        self._left_panel.grid_columnconfigure(0, weight=1)
 
         self._email_lbl = ctk.CTkLabel(
-            self._content_frame, text="Email Content",
-            font=ctk.CTkFont(size=12, weight='bold'), text_color=C["text"]
+            self._left_panel, text="\u2709  Email Content",
+            font=ctk.CTkFont(family='Segoe UI', size=12, weight='bold'),
+            text_color=C["text"]
         )
-        self._email_lbl.grid(row=0, column=0, sticky='w', pady=(0, 8))
+        self._email_lbl.grid(row=0, column=0, sticky='w', pady=(0, 6))
 
         self._text_input = ctk.CTkTextbox(
-            self._content_frame, corner_radius=10,
+            self._left_panel, corner_radius=10,
             fg_color=C["card"], border_color=C["border"], border_width=1,
             text_color=C["subtext"],
-            font=ctk.CTkFont(family='Segoe UI', size=13), wrap='word',
+            font=ctk.CTkFont(family='Segoe UI', size=13), wrap='word'
         )
         self._text_input.grid(row=1, column=0, sticky='nsew')
-        self._text_input.insert('0.0', 'Paste or type the email content here...')
+        self._text_input.insert('0.0', PLACEHOLDER)
         self._text_input.bind('<FocusIn>',  self._clear_placeholder)
         self._text_input.bind('<FocusOut>', self._restore_placeholder)
 
-        # Buttons row
-        btn_row = ctk.CTkFrame(self._content_frame, fg_color='transparent')
-        btn_row.grid(row=2, column=0, sticky='ew', pady=(14, 0))
+        # Button row
+        btn_row = ctk.CTkFrame(self._left_panel, fg_color='transparent')
+        btn_row.grid(row=2, column=0, sticky='ew', pady=(10, 0))
         btn_row.grid_columnconfigure(0, weight=1)
 
         self._analyze_btn = ctk.CTkButton(
-            btn_row, text="Analyze", command=self._analyze, height=44,
-            font=ctk.CTkFont(size=14, weight='bold'),
-            fg_color=C["accent"], hover_color=C["accent_hv"], corner_radius=10,
+            btn_row, text="\U0001f50d  Analyze",
+            command=self._analyze, height=42,
+            font=ctk.CTkFont(family='Segoe UI', size=13, weight='bold'),
+            fg_color=C["accent"], hover_color=C["accent_hv"], corner_radius=10
         )
         self._analyze_btn.grid(row=0, column=0, sticky='ew')
 
-        self._clear_btn = ctk.CTkButton(
-            btn_row, text="Clear", command=self._clear_all, height=44,
-            font=ctk.CTkFont(size=12),
-            fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"],
-            text_color=C["text"], corner_radius=10, width=110,
+        self._analyze_spinner = LoaderSpinner(
+            btn_row, bg_color=C["bg"], color=C["loader"]
         )
-        self._clear_btn.grid(row=0, column=1, padx=(10, 0))
+        self._analyze_spinner.grid(row=0, column=1, padx=(8, 0))
+
+        self._clear_btn = ctk.CTkButton(
+            btn_row, text="\u2715  Clear",
+            command=self._clear_all, height=42,
+            font=ctk.CTkFont(family='Segoe UI', size=12),
+            fg_color=C["btn_sec"], hover_color=C["btn_sec_hv"],
+            text_color=C["text"], corner_radius=10, width=100
+        )
+        self._clear_btn.grid(row=0, column=2, padx=(8, 0))
 
         # Result card
         self._result_card = ctk.CTkFrame(
-            self._content_frame, fg_color=C["card"], corner_radius=12,
-            border_width=1, border_color=C["border"],
+            self._left_panel, fg_color=C["card"],
+            corner_radius=12, border_width=1, border_color=C["border"]
         )
-        self._result_card.grid(row=3, column=0, sticky='ew', pady=(18, 0))
-        self._result_card.grid_columnconfigure((0, 1), weight=1)
+        self._result_card.grid(row=3, column=0, sticky='ew', pady=(14, 0))
+        self._result_card.grid_columnconfigure(0, weight=1)
+        self._result_card.grid_columnconfigure(1, weight=0)
+
+        # Verdict text
+        verdict_col = ctk.CTkFrame(self._result_card, fg_color='transparent')
+        verdict_col.grid(row=0, column=0, sticky='w', padx=20, pady=16)
 
         self._verdict_label = ctk.CTkLabel(
-            self._result_card, text="Awaiting Analysis",
-            font=ctk.CTkFont(size=15, weight='bold'), text_color=C["subtext"]
+            verdict_col, text="Awaiting Analysis",
+            font=ctk.CTkFont(family='Segoe UI', size=16, weight='bold'),
+            text_color=C["subtext"]
         )
-        self._verdict_label.grid(row=0, column=0, columnspan=2, pady=(22, 10))
-
-        prob_frame = ctk.CTkFrame(self._result_card, fg_color='transparent')
-        prob_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=36, pady=(0, 6))
-        prob_frame.grid_columnconfigure((0, 1), weight=1)
-
-        self._ham_lbl  = ctk.CTkLabel(prob_frame, text="HAM",  font=ctk.CTkFont(size=10, weight='bold'), text_color=C["ham"])
-        self._spam_lbl = ctk.CTkLabel(prob_frame, text="SPAM", font=ctk.CTkFont(size=10, weight='bold'), text_color=C["spam"])
-        self._ham_lbl.grid(row=0,  column=0, sticky='w')
-        self._spam_lbl.grid(row=0, column=1, sticky='w')
-
-        self._ham_bar  = ctk.CTkProgressBar(prob_frame, height=12, corner_radius=6, fg_color=C["border"], progress_color=C["ham"])
-        self._spam_bar = ctk.CTkProgressBar(prob_frame, height=12, corner_radius=6, fg_color=C["border"], progress_color=C["spam"])
-        self._ham_bar.set(0)
-        self._spam_bar.set(0)
-        self._ham_bar.grid(row=1,  column=0, sticky='ew', padx=(0, 10))
-        self._spam_bar.grid(row=1, column=1, sticky='ew', padx=(10, 0))
-
-        self._ham_pct  = ctk.CTkLabel(prob_frame, text="--%", font=ctk.CTkFont(size=11), text_color=C["ham"])
-        self._spam_pct = ctk.CTkLabel(prob_frame, text="--%", font=ctk.CTkFont(size=11), text_color=C["spam"])
-        self._ham_pct.grid(row=2,  column=0, sticky='w', pady=(2, 0))
-        self._spam_pct.grid(row=2, column=1, sticky='w', pady=(2, 0))
+        self._verdict_label.grid(row=0, column=0, sticky='w')
 
         self._model_info_label = ctk.CTkLabel(
-            self._result_card, text="",
-            font=ctk.CTkFont(size=10), text_color=C["subtext"]
+            verdict_col, text="",
+            font=ctk.CTkFont(family='Segoe UI', size=10),
+            text_color=C["subtext"]
         )
-        self._model_info_label.grid(row=2, column=0, columnspan=2, pady=(6, 18))
+        self._model_info_label.grid(row=1, column=0, sticky='w', pady=(4, 0))
+
+        # Donut chart
+        self._donut = DonutChart(
+            self._result_card,
+            bg_color=C["card"]
+        )
+        self._donut.grid(row=0, column=1, padx=(0, 16), pady=12)
+
+        # ── Right panel: sample emails ──
+        self._right_panel = ctk.CTkFrame(self._content_frame, fg_color=C["bg"])
+        self._right_panel.grid(row=0, column=1, sticky='nsew')
+        self._right_panel.grid_rowconfigure(1, weight=1)
+        self._right_panel.grid_columnconfigure(0, weight=1)
+
+        self._samples_lbl = ctk.CTkLabel(
+            self._right_panel, text="\U0001f4e8  Sample Emails",
+            font=ctk.CTkFont(family='Segoe UI', size=12, weight='bold'),
+            text_color=C["text"]
+        )
+        self._samples_lbl.grid(row=0, column=0, sticky='w', pady=(0, 6))
+
+        samples_scroll = ctk.CTkScrollableFrame(
+            self._right_panel, fg_color=C["bg"], corner_radius=0
+        )
+        samples_scroll.grid(row=1, column=0, sticky='nsew')
+        samples_scroll.grid_columnconfigure(0, weight=1)
+
+        self._sample_btns = []
+        for idx, (tag, body) in enumerate(SAMPLE_EMAILS):
+            short = body[:72] + "..." if len(body) > 72 else body
+            btn = ctk.CTkButton(
+                samples_scroll,
+                text=f"{tag}\n{short}",
+                command=lambda b=body: self._load_sample(b),
+                height=64, corner_radius=8, anchor='w',
+                fg_color=C["card"], hover_color=C["card2"],
+                text_color=C["text"], border_width=1, border_color=C["border"],
+                font=ctk.CTkFont(family='Segoe UI', size=10), wraplength=220
+            )
+            btn.grid(row=idx, column=0, sticky='ew', pady=4)
+            self._sample_btns.append((btn, body))
 
         return frame
 
-    # ---------- Reports View --------------------------------------------
+    # ── Reports View ─────────────────────────────────────────────────
     def _build_reports_view(self, parent):
         C = self.C
-        frame = ctk.CTkFrame(parent, fg_color=C["bg"])
-        frame.grid_rowconfigure(0, weight=1)
-        frame.grid_columnconfigure(0, weight=1)
+        self._reports_frame = ctk.CTkFrame(parent, fg_color=C["bg"])
+        self._reports_frame.grid_rowconfigure(0, weight=1)
+        self._reports_frame.grid_columnconfigure(0, weight=1)
 
-        scroll = ctk.CTkScrollableFrame(frame, fg_color=C["bg"])
-        scroll.grid(row=0, column=0, sticky='nsew', padx=32, pady=24)
-        scroll.grid_columnconfigure(0, weight=1)
+        self._scroll_frame = ctk.CTkScrollableFrame(self._reports_frame, fg_color=C["bg"])
+        self._scroll_frame.grid(row=0, column=0, sticky='nsew', padx=28, pady=20)
+        self._scroll_frame.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
-            scroll, text="Model Performance Reports",
-            font=ctk.CTkFont(size=15, weight='bold'), text_color=C["text"]
+            self._scroll_frame,
+            text="\U0001f4ca  Model Performance Reports",
+            font=ctk.CTkFont(family='Segoe UI', size=15, weight='bold'),
+            text_color=C["text"]
         ).grid(row=0, column=0, sticky='w', pady=(0, 4))
 
         ctk.CTkLabel(
-            scroll,
-            text="Evaluation results for all trained classifiers on the SMS Spam Collection dataset.",
-            font=ctk.CTkFont(size=11), text_color=C["subtext"]
-        ).grid(row=1, column=0, sticky='w', pady=(0, 16))
+            self._scroll_frame,
+            text="Evaluation of all trained classifiers on the SMS Spam Collection dataset.",
+            font=ctk.CTkFont(family='Segoe UI', size=11),
+            text_color=C["subtext"]
+        ).grid(row=1, column=0, sticky='w', pady=(0, 14))
 
         # Metrics table
         self._metrics_frame = ctk.CTkFrame(
-            scroll, fg_color=C["card"], corner_radius=10,
-            border_width=1, border_color=C["border"]
+            self._scroll_frame, fg_color=C["card"],
+            corner_radius=10, border_width=1, border_color=C["border"]
         )
-        self._metrics_frame.grid(row=2, column=0, sticky='ew', pady=(0, 16))
-        self._metrics_frame.grid_columnconfigure((0,1,2,3,4), weight=1)
+        self._metrics_frame.grid(row=2, column=0, sticky='ew', pady=(0, 14))
+        self._metrics_frame.grid_columnconfigure((0, 1, 2, 3, 4), weight=1)
 
+        self._metric_header_lbls = []
         for col, h in enumerate(['Model', 'Accuracy', 'Precision', 'Recall', 'F1-Score']):
-            ctk.CTkLabel(
+            lbl = ctk.CTkLabel(
                 self._metrics_frame, text=h,
-                font=ctk.CTkFont(size=11, weight='bold'), text_color=C["accent"]
-            ).grid(row=0, column=col, padx=14, pady=12, sticky='w')
+                font=ctk.CTkFont(family='Segoe UI', size=11, weight='bold'),
+                text_color=C["accent"]
+            )
+            lbl.grid(row=0, column=col, padx=16, pady=12, sticky='w')
+            self._metric_header_lbls.append(lbl)
 
         ctk.CTkFrame(self._metrics_frame, height=1, fg_color=C["divider"]).grid(
-            row=1, column=0, columnspan=5, sticky='ew', padx=10)
+            row=1, column=0, columnspan=5, sticky='ew', padx=8)
 
-        self._metric_rows = []
-        for r_idx, display_name in enumerate(['Naive Bayes', 'Support Vector Machine', 'Neural Network']):
-            bg = C["card"] if r_idx % 2 == 0 else C["card2"]
-            ctk.CTkLabel(
-                self._metrics_frame, text=display_name,
-                font=ctk.CTkFont(size=12), text_color=C["text"]
-            ).grid(row=r_idx + 2, column=0, padx=14, pady=10, sticky='w')
-            row_labels = []
+        self._metric_rows       = []
+        self._metric_model_lbls = []
+        for r_idx, name in enumerate(['Naive Bayes', 'Support Vector Machine', 'Neural Network']):
+            ml = ctk.CTkLabel(
+                self._metrics_frame, text=name,
+                font=ctk.CTkFont(family='Segoe UI', size=12),
+                text_color=C["text"]
+            )
+            ml.grid(row=r_idx + 2, column=0, padx=16, pady=10, sticky='w')
+            self._metric_model_lbls.append(ml)
+            row_lbls = []
             for col in range(1, 5):
                 lbl = ctk.CTkLabel(
                     self._metrics_frame, text="--",
-                    font=ctk.CTkFont(size=12), text_color=C["subtext"]
+                    font=ctk.CTkFont(family='Consolas', size=12),
+                    text_color=C["subtext"]
                 )
-                lbl.grid(row=r_idx + 2, column=col, padx=14, pady=10, sticky='w')
-                row_labels.append(lbl)
-            self._metric_rows.append(row_labels)
+                lbl.grid(row=r_idx + 2, column=col, padx=16, pady=10, sticky='w')
+                row_lbls.append(lbl)
+            self._metric_rows.append(row_lbls)
 
-        ctk.CTkButton(
-            scroll, text="Load / Refresh Results",
+        # Refresh button with spinner
+        ref_row = ctk.CTkFrame(self._scroll_frame, fg_color='transparent')
+        ref_row.grid(row=3, column=0, sticky='w', pady=(0, 22))
+
+        self._refresh_btn = ctk.CTkButton(
+            ref_row, text="\u27f3  Load / Refresh Results",
             command=self._load_reports, height=38,
             fg_color=C["accent"], hover_color=C["accent_hv"],
-            corner_radius=8, font=ctk.CTkFont(size=12)
-        ).grid(row=3, column=0, sticky='w', pady=(0, 24))
+            corner_radius=8,
+            font=ctk.CTkFont(family='Segoe UI', size=12)
+        )
+        self._refresh_btn.grid(row=0, column=0)
 
-        ctk.CTkLabel(
-            scroll, text="Confusion Matrices",
-            font=ctk.CTkFont(size=13, weight='bold'), text_color=C["text"]
-        ).grid(row=4, column=0, sticky='w', pady=(0, 12))
+        self._reports_spinner = LoaderSpinner(
+            ref_row, bg_color=C["bg"], color=C["loader"]
+        )
+        self._reports_spinner.grid(row=0, column=1, padx=(10, 0))
 
-        self._cm_frame = ctk.CTkFrame(scroll, fg_color='transparent')
-        self._cm_frame.grid(row=5, column=0, sticky='ew')
-        self._cm_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        # Confusion matrices
+        self._cm_title_lbl = ctk.CTkLabel(
+            self._scroll_frame, text="\U0001f5bc  Confusion Matrices",
+            font=ctk.CTkFont(family='Segoe UI', size=13, weight='bold'),
+            text_color=C["text"]
+        )
+        self._cm_title_lbl.grid(row=4, column=0, sticky='w', pady=(0, 10))
+
+        self._cm_grid = ctk.CTkFrame(self._scroll_frame, fg_color='transparent')
+        self._cm_grid.grid(row=5, column=0, sticky='ew')
+        self._cm_grid.grid_columnconfigure((0, 1, 2), weight=1)
 
         self._cm_labels = []
-        for col, title in enumerate(['Naive Bayes', 'Support Vector Machine', 'Neural Network']):
+        for col, title in enumerate(['Naive Bayes', 'SVM', 'Neural Network']):
             ctk.CTkLabel(
-                self._cm_frame, text=title,
-                font=ctk.CTkFont(size=11, weight='bold'), text_color=C["subtext"]
+                self._cm_grid, text=title,
+                font=ctk.CTkFont(family='Segoe UI', size=11, weight='bold'),
+                text_color=C["subtext"]
             ).grid(row=0, column=col, pady=(0, 6))
-            img_lbl = ctk.CTkLabel(
-                self._cm_frame, text="Run training to generate",
-                text_color=C["subtext"], font=ctk.CTkFont(size=10)
+            lbl = ctk.CTkLabel(
+                self._cm_grid,
+                text="[ Run training to generate ]",
+                text_color=C["subtext"],
+                font=ctk.CTkFont(family='Segoe UI', size=10)
             )
-            img_lbl.grid(row=1, column=col, padx=6)
-            self._cm_labels.append(img_lbl)
+            lbl.grid(row=1, column=col, padx=6)
+            self._cm_labels.append(lbl)
 
-        return frame
+        return self._reports_frame
 
-    # ---------- View Switching ------------------------------------------
+    # ── View Switching ────────────────────────────────────────────────
     def _switch_view(self, view: str):
         C = self.C
         self._view_analysis.grid_forget()
@@ -487,24 +791,36 @@ class SpamDetectorApp(ctk.CTk):
 
         if view == 'analysis':
             self._view_analysis.grid(row=1, column=0, sticky='nsew')
-            self._header_label.configure(text="Email Analysis")
-            self._btn_analysis.configure(fg_color=C["nav_active"], text_color="#ffffff", font=ctk.CTkFont(size=12, weight='bold'))
-            self._btn_reports.configure(fg_color=C["nav_idle"],   text_color=C["text"],  font=ctk.CTkFont(size=12))
+            self._header_label.configure(text="\u2709  Email Analysis")
+            self._btn_analysis.configure(fg_color=C["nav_active"], text_color="#ffffff",
+                                          font=ctk.CTkFont(family='Segoe UI', size=12, weight='bold'))
+            self._btn_reports.configure(fg_color=C["nav_idle"], text_color=C["text"],
+                                         font=ctk.CTkFont(family='Segoe UI', size=12))
         else:
             self._view_reports.grid(row=1, column=0, sticky='nsew')
-            self._header_label.configure(text="Model Performance Reports")
-            self._btn_reports.configure(fg_color=C["nav_active"],  text_color="#ffffff", font=ctk.CTkFont(size=12, weight='bold'))
-            self._btn_analysis.configure(fg_color=C["nav_idle"],   text_color=C["text"],  font=ctk.CTkFont(size=12))
+            self._header_label.configure(text="\U0001f4ca  Model Performance Reports")
+            self._btn_reports.configure(fg_color=C["nav_active"], text_color="#ffffff",
+                                         font=ctk.CTkFont(family='Segoe UI', size=12, weight='bold'))
+            self._btn_analysis.configure(fg_color=C["nav_idle"], text_color=C["text"],
+                                          font=ctk.CTkFont(family='Segoe UI', size=12))
             self._load_reports()
 
         self._current_view = view
 
-    # ---------- Reports Logic -------------------------------------------
+    # ── Sample Emails ─────────────────────────────────────────────────
+    def _load_sample(self, body: str):
+        self._text_input.delete('0.0', 'end')
+        self._text_input.insert('0.0', body)
+        self._text_input.configure(text_color=self.C["text"])
+        self._set_status("\u2022  Sample email loaded. Click Analyze.")
+
+    # ── Reports Logic ─────────────────────────────────────────────────
     def _load_reports(self):
         if not models_exist():
-            self._set_status("Models not found. Train models first.")
+            self._set_status("\u26a0  Models not found. Train models first.")
             return
-        self._set_status("Loading report data...")
+        self._set_status("\u23f3  Loading report data...")
+        self._reports_spinner.start()
         threading.Thread(target=self._compute_reports, daemon=True).start()
 
     def _compute_reports(self):
@@ -514,9 +830,8 @@ class SpamDetectorApp(ctk.CTk):
             from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
             X_train, X_test, y_train, y_test, _ = load_and_preprocess()
-            model_keys = ['naive_bayes', 'svm', 'neural_network']
             results = []
-            for key in model_keys:
+            for key in ['naive_bayes', 'svm', 'neural_network']:
                 model, _ = load_model(key)
                 y_pred = model.predict(X_test)
                 results.append({
@@ -527,57 +842,52 @@ class SpamDetectorApp(ctk.CTk):
                 })
             self.after(0, self._update_metrics_table, results)
             self.after(0, self._load_cm_images)
-            self.after(0, self._set_status, "Reports loaded successfully.")
+            self.after(0, self._reports_spinner.stop)
+            self.after(0, self._set_status, "\u2714  Reports loaded successfully.")
         except Exception as e:
-            self.after(0, self._set_status, f"Error loading reports: {e}")
+            self.after(0, self._reports_spinner.stop)
+            self.after(0, self._set_status, f"\u26a0  Error: {e}")
 
     def _update_metrics_table(self, results):
         C = self.C
         for row_labels, m in zip(self._metric_rows, results):
-            values = [
+            for lbl, val in zip(row_labels, [
                 f"{m['accuracy']*100:.2f}%",
                 f"{m['precision']*100:.2f}%",
                 f"{m['recall']*100:.2f}%",
                 f"{m['f1']*100:.2f}%",
-            ]
-            for lbl, val in zip(row_labels, values):
+            ]):
                 lbl.configure(text=val, text_color=C["text"])
 
     def _load_cm_images(self):
         try:
             from PIL import Image as PILImage
-            cm_files = [
-                'reports/cm_naive_bayes.png',
-                'reports/cm_svm.png',
-                'reports/cm_neural_network.png',
-            ]
-            for lbl, fpath in zip(self._cm_labels, cm_files):
+            paths = ['reports/cm_naive_bayes.png', 'reports/cm_svm.png', 'reports/cm_neural_network.png']
+            for lbl, fpath in zip(self._cm_labels, paths):
                 if os.path.exists(fpath):
-                    img = PILImage.open(fpath).resize((290, 240))
-                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(290, 240))
-                    lbl.configure(image=ctk_img, text="")
-                    lbl._ctk_image = ctk_img
+                    img    = PILImage.open(fpath).resize((290, 240))
+                    ctk_i  = ctk.CTkImage(light_image=img, dark_image=img, size=(290, 240))
+                    lbl.configure(image=ctk_i, text="")
+                    lbl._ctk_image = ctk_i
         except ImportError:
-            self._set_status("Pillow not installed. Run: pip install Pillow")
+            self._set_status("\u26a0  Install Pillow: pip install Pillow")
 
-    # ---------- Analysis Logic ------------------------------------------
+    # ── Analysis Logic ────────────────────────────────────────────────
     def _analyze(self):
         text = self._text_input.get('0.0', 'end').strip()
-        placeholder = 'Paste or type the email content here...'
-        if not text or text == placeholder:
+        if not text or text == PLACEHOLDER:
             messagebox.showwarning("Input Required", "Please enter email content to analyze.")
             return
         if not models_exist():
-            messagebox.showerror("Models Not Found", "Trained models not found.\nClick 'Train Models' first.")
+            messagebox.showerror("Models Not Found",
+                                 "Trained models not found.\nClick '\u26a1 Train Models' first.")
             return
-        self._set_status("Analyzing...")
+        self._set_status("\u23f3  Analyzing...")
+        self._analyze_spinner.start()
         self._verdict_label.configure(text="Analyzing...", text_color=self.C["subtext"],
-                                       font=ctk.CTkFont(size=13))
-        self._ham_bar.set(0)
-        self._spam_bar.set(0)
-        self._ham_pct.configure(text="--%")
-        self._spam_pct.configure(text="--%")
+                                       font=ctk.CTkFont(family='Segoe UI', size=14))
         self._model_info_label.configure(text="")
+        self._donut.set_values(0, 0, "", "")
         threading.Thread(target=self._run_prediction, args=(text,), daemon=True).start()
 
     def _run_prediction(self, text):
@@ -586,78 +896,86 @@ class SpamDetectorApp(ctk.CTk):
             result = predict(text, model_name=self._selected_model.get())
             self.after(0, self._show_result, result)
         except Exception as e:
+            self.after(0, self._analyze_spinner.stop)
             self.after(0, self._show_error, str(e))
 
     def _show_result(self, result):
         C = self.C
+        self._analyze_spinner.stop()
         label      = result['label']
         confidence = result['confidence']
         spam_prob  = result['spam_prob']
         ham_prob   = result['ham_prob']
         model_name = self._selected_model.get().replace('_', ' ').title()
         color = C["spam"] if label == 'Spam' else C["ham"]
+        icon  = "\U0001f6ab" if label == 'Spam' else "\u2705"
 
         self._verdict_label.configure(
-            text=f"{label.upper()}   {confidence}% Confidence",
-            font=ctk.CTkFont(size=17, weight='bold'), text_color=color
+            text=f"{icon}  {label.upper()}   {confidence}% Confidence",
+            font=ctk.CTkFont(family='Segoe UI', size=16, weight='bold'),
+            text_color=color
         )
-        self._ham_bar.set(ham_prob / 100)
-        self._spam_bar.set(spam_prob / 100)
-        self._ham_pct.configure(text=f"{ham_prob}%")
-        self._spam_pct.configure(text=f"{spam_prob}%")
-        self._model_info_label.configure(text=f"Model: {model_name}")
-        self._set_status(f"Analysis complete  |  Ham: {ham_prob}%  |  Spam: {spam_prob}%")
+        self._model_info_label.configure(
+            text=f"Model: {model_name}  \u00b7  Ham: {ham_prob}%  \u00b7  Spam: {spam_prob}%"
+        )
+        self._donut.set_values(
+            ham_pct=ham_prob, spam_pct=spam_prob,
+            label=f"{label}\n{confidence}%",
+            sub="confidence"
+        )
+        self._set_status(f"\u2714  Done  |  Ham: {ham_prob}%  |  Spam: {spam_prob}%")
 
     def _show_error(self, error):
         messagebox.showerror("Prediction Error", f"Prediction failed:\n{error}")
-        self._set_status("Error occurred.")
+        self._set_status("\u26a0  Error occurred.")
         self._verdict_label.configure(text="Analysis failed.", text_color=self.C["spam"])
 
     def _train_models(self):
-        self._set_status("Training models... this may take a minute.")
+        self._set_status("\u23f3  Training models... please wait.")
+        self._train_spinner.start()
         threading.Thread(target=self._run_training, daemon=True).start()
 
     def _run_training(self):
         try:
             from src.train import train_all
             train_all()
-            self.after(0, self._set_status, "All models trained successfully.")
+            self.after(0, self._train_spinner.stop)
+            self.after(0, self._set_status, "\u2714  All models trained successfully.")
             self.after(0, messagebox.showinfo, "Done", "All 3 models trained and saved.")
         except Exception as e:
+            self.after(0, self._train_spinner.stop)
             self.after(0, messagebox.showerror, "Training Error", str(e))
-            self.after(0, self._set_status, "Training failed.")
+            self.after(0, self._set_status, "\u26a0  Training failed.")
 
+    # ── Utils ─────────────────────────────────────────────────────────
     def _clear_all(self):
         self._text_input.delete('0.0', 'end')
-        self._text_input.insert('0.0', 'Paste or type the email content here...')
+        self._text_input.insert('0.0', PLACEHOLDER)
         self._text_input.configure(text_color=self.C["subtext"])
         self._verdict_label.configure(
             text="Awaiting Analysis",
-            font=ctk.CTkFont(size=15, weight='bold'),
+            font=ctk.CTkFont(family='Segoe UI', size=16, weight='bold'),
             text_color=self.C["subtext"]
         )
-        self._ham_bar.set(0)
-        self._spam_bar.set(0)
-        self._ham_pct.configure(text="--%")
-        self._spam_pct.configure(text="--%")
         self._model_info_label.configure(text="")
-        self._set_status("Ready")
+        self._donut.set_values(0, 0, "", "")
+        self._set_status("\u2022  Ready")
 
     def _clear_placeholder(self, event):
-        if self._text_input.get('0.0', 'end').strip() == 'Paste or type the email content here...':
+        if self._text_input.get('0.0', 'end').strip() == PLACEHOLDER:
             self._text_input.delete('0.0', 'end')
             self._text_input.configure(text_color=self.C["text"])
 
     def _restore_placeholder(self, event):
         if not self._text_input.get('0.0', 'end').strip():
-            self._text_input.insert('0.0', 'Paste or type the email content here...')
+            self._text_input.insert('0.0', PLACEHOLDER)
             self._text_input.configure(text_color=self.C["subtext"])
 
     def _set_status(self, message):
         self._status_label.configure(text=message)
 
 
-# ---------- Entry Point -------------------------------------------------
+# ── Entry Point ───────────────────────────────────────────────────────────
 if __name__ == '__main__':
     app = SpamDetectorApp()
     app.mainloop()
