@@ -1,7 +1,7 @@
 import pickle
 import os
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.svm import LinearSVC
+from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from src.preprocess import load_and_preprocess
 from src.evaluate import evaluate_model, plot_model_comparison
@@ -12,8 +12,12 @@ def train_all(data_path: str = 'data/spam.csv') -> dict:
     X_train, X_test, y_train, y_test, _ = load_and_preprocess(data_path)
 
     models = {
-        'naive_bayes':    MultinomialNB(),
-        'svm':            LinearSVC(max_iter=1000),
+        # alpha=0.1 gives better recall on spam vs default alpha=1.0
+        'naive_bayes': MultinomialNB(alpha=0.1),
+
+        # SVC with probability=True gives real confidence scores (no hardcoded fallback)
+        'svm': SVC(kernel='linear', probability=True, C=1.0, random_state=42),
+
         'neural_network': MLPClassifier(
             hidden_layer_sizes=(128, 64),
             max_iter=50,
@@ -39,6 +43,5 @@ def train_all(data_path: str = 'data/spam.csv') -> dict:
     return results
 
 
-# Allows:  python -m src.train
 if __name__ == '__main__':
     train_all()
