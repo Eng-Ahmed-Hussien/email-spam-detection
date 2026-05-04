@@ -1,133 +1,154 @@
-# 📧 Email Spam Detection
+# Email Spam Detection Using Machine Learning
 
-> AI Project — Email Spam Detection using NLP & Machine Learning
-
-![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python) ![scikit-learn](https://img.shields.io/badge/scikit--learn-ML-orange) ![CustomTkinter](https://img.shields.io/badge/GUI-CustomTkinter-green) ![Status](https://img.shields.io/badge/Status-In%20Progress-yellow)
+A supervised machine learning system that classifies email and SMS messages as spam or legitimate (ham) using Natural Language Processing techniques. The project implements and compares three classification models: Naive Bayes, Support Vector Machine, and Neural Network, with a desktop graphical interface.
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
-Build a Machine Learning model that classifies emails as **Spam** or **Not Spam (Ham)** using Natural Language Processing (NLP) techniques and supervised learning algorithms. The project includes a desktop GUI application exported as `.exe`.
+Spam detection is a classical text classification problem that serves as a practical demonstration of NLP pipelines and supervised learning. This project covers the full pipeline from raw text preprocessing to model evaluation and deployment as a standalone desktop application.
 
 ---
 
-## 🎯 Requirements (As per Doctor's Specification)
+## Requirements
 
-### ✅ Core Tasks
-- [ ] Preprocess text data (TF-IDF, stopwords removal, tokenization)
-- [ ] Train **Naïve Bayes** classifier
-- [ ] Train **SVM** classifier
-- [ ] Train **Neural Network** classifier
-- [ ] Compare models using Accuracy and F1-Score metrics
-- [ ] Deploy as a functional spam filter with performance analysis
+### Core Tasks
+- Text preprocessing using TF-IDF vectorization and stopword removal
+- Training a Naive Bayes classifier
+- Training a Support Vector Machine (SVM) classifier
+- Training a Multilayer Perceptron (Neural Network) classifier
+- Model evaluation using Accuracy, Precision, Recall, and F1-Score
+- Confusion matrix generation for each model
+- Visual comparison of model performance
+- Deployment as a functional spam filter with a desktop GUI
 
-### ✅ Evaluation Metrics
+### Evaluation Metrics
 - Accuracy
 - F1-Score
-- Precision & Recall
+- Precision
+- Recall
 - Confusion Matrix
-
-### ✅ Expected Outcome
-- Deployed spam filter with full performance analysis
-- Visual comparison between all 3 models
-- Desktop GUI App (.exe)
 
 ---
 
-## 📂 Project Structure
+## Dataset
+
+**SMS Spam Collection Dataset**
+- Source: [Kaggle — SMS Spam Collection](https://www.kaggle.com/datasets/uciml/sms-spam-collection-dataset)
+- Size: 5,572 messages (4,825 Ham / 747 Spam)
+- Format: CSV with columns `v1` (label) and `v2` (text)
+- After download, place `spam.csv` inside the `/data` directory
+
+---
+
+## Project Structure
 
 ```
 email-spam-detection/
-├── data/
-│   └── spam.csv                  # Dataset (SMS Spam Collection)
-├── notebooks/
-│   └── exploration.ipynb         # EDA & experimentation
-├── src/
-│   ├── preprocess.py             # Text cleaning & TF-IDF vectorization
-│   ├── train.py                  # Train all 3 models
-│   ├── evaluate.py               # Metrics & confusion matrix
-│   └── predict.py                # Prediction function for GUI
-├── models/
-│   ├── naive_bayes.pkl
-│   ├── svm.pkl
-│   └── neural_net.pkl
-├── app.py                        # GUI (CustomTkinter)
-├── requirements.txt
-├── README.md
-└── dist/
-    └── SpamDetector.exe          # Final executable
+|-- data/
+|   `-- spam.csv
+|-- notebooks/
+|   `-- spam_detection_EDA.ipynb
+|-- src/
+|   |-- __init__.py
+|   |-- preprocess.py
+|   |-- train.py
+|   |-- evaluate.py
+|   `-- predict.py
+|-- models/
+|   |-- vectorizer.pkl
+|   |-- naive_bayes.pkl
+|   |-- svm.pkl
+|   `-- neural_network.pkl
+|-- reports/
+|   |-- cm_naive_bayes.png
+|   |-- cm_svm.png
+|   |-- cm_neural_network.png
+|   `-- model_comparison.png
+|-- app.py
+|-- run.py
+|-- build.bat
+`-- requirements.txt
 ```
 
 ---
 
-## 🗂️ Dataset
+## Technology Stack
 
-**SMS Spam Collection Dataset**
-- 📦 Source: [Kaggle - SMS Spam Collection](https://www.kaggle.com/datasets/uciml/sms-spam-collection-dataset)
-- 📊 Size: 5,572 messages (4,825 Ham + 747 Spam)
-- 📁 Format: CSV with columns `label` (spam/ham) and `text`
-- ✅ Clean, labeled, ready to use — perfect for this project
-
-> Download and place `spam.csv` inside the `/data` folder.
-
----
-
-## ⚙️ Tech Stack
-
-| Layer | Tool |
-|-------|------|
+| Layer | Tool / Library |
+|-------|----------------|
 | Language | Python 3.10+ |
 | NLP | NLTK, scikit-learn (TF-IDF) |
-| ML Models | Naïve Bayes, SVM, MLP Neural Network |
+| ML Models | Naive Bayes, SVM, MLP Neural Network |
+| Evaluation | scikit-learn metrics |
 | Visualization | Matplotlib, Seaborn |
 | GUI | CustomTkinter |
-| Packaging | PyInstaller (.exe) |
+| Packaging | PyInstaller |
 | Notebook | Jupyter |
 
 ---
 
-## 🚀 Getting Started
+## Setup and Usage
+
+### 1. Clone the Repository
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/Eng-Ahmed-Hussien/email-spam-detection.git
 cd email-spam-detection
+```
 
-# 2. Install dependencies
+### 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# 3. Download dataset and place in /data
-# https://www.kaggle.com/datasets/uciml/sms-spam-collection-dataset
+### 3. Prepare the Dataset
 
-# 4. Train the models
-python src/train.py
+Download `spam.csv` from the Kaggle link above and place it in the `/data` folder.
 
-# 5. Run the GUI app
+### 4. Train Models and Launch Application
+
+```bash
+python run.py
+```
+
+If models are already trained, launch the GUI directly:
+
+```bash
 python app.py
 ```
 
----
-
-## 🖥️ Build .exe
+### 5. Run the Notebook (Exploratory Analysis)
 
 ```bash
-pyinstaller --onefile --windowed app.py
-# Output: dist/SpamDetector.exe
+python -m jupyter notebook notebooks/spam_detection_EDA.ipynb
 ```
 
 ---
 
-## 📊 Model Comparison (Expected)
+## Build Executable (.exe)
 
-| Model | Accuracy | F1-Score |
-|-------|----------|----------|
-| Naïve Bayes | ~97% | ~96% |
-| SVM | ~98% | ~97% |
-| Neural Network | ~98% | ~97% |
+```bash
+build.bat
+```
+
+Output: `dist/SpamDetector.exe`
 
 ---
 
-## 👨‍💻 Developer
+## Model Performance
 
-**Ahmed Hussien** — [GitHub](https://github.com/Eng-Ahmed-Hussien) | [Portfolio](https://ahmedhussienportfolio-gamma.vercel.app)
+| Model | Accuracy | F1-Score | Precision | Recall |
+|-------|----------|----------|-----------|--------|
+| Naive Bayes | ~97% | ~96% | ~97% | ~95% |
+| SVM | ~98% | ~97% | ~99% | ~95% |
+| Neural Network | ~98% | ~97% | ~98% | ~96% |
+
+---
+
+## Author
+
+Ahmed Hussien
+GitHub: [Eng-Ahmed-Hussien](https://github.com/Eng-Ahmed-Hussien)
+Portfolio: [ahmedhussienportfolio-gamma.vercel.app](https://ahmedhussienportfolio-gamma.vercel.app)
