@@ -1,7 +1,7 @@
 """
-Spam Email Detector  v1.4.2
-Fixes: sample card tags, spinner bg, sidebar row layout,
-       donut hidden until result, all 3 models selectable.
+Spam Email Detector  v1.4.3
+Fixes: donut inner text split lines, subtext color theme-aware,
+       repaint triggers donut redraw, light mode text contrast.
 """
 import customtkinter as ctk
 from tkinter import messagebox, Canvas
@@ -10,7 +10,7 @@ import os, sys
 
 # ── Version ──────────────────────────────────────────────────────────────
 APP_TITLE   = "Spam Email Detector"
-APP_VERSION = "v1.4.2"
+APP_VERSION = "v1.4.3"
 
 TEAM_MEMBERS = [
     "Ahmed Hussien",
@@ -19,7 +19,6 @@ TEAM_MEMBERS = [
 ]
 
 # ── Sample Emails ─────────────────────────────────────────────────────────
-# tag: ("SPAM" or "HAM", body_text)
 SAMPLE_EMAILS = [
     ("SPAM", "Congratulations! You've been selected to receive a FREE iPhone 15. Click the link NOW to claim your prize before it expires!"),
     ("SPAM", "URGENT: Your bank account has been compromised. Verify your details immediately at secure-bank-login.xyz or your account will be suspended."),
@@ -91,8 +90,9 @@ def models_exist():
 
 # ── Donut Chart ────────────────────────────────────────────────────────────
 class DonutChart(Canvas):
+    """Ring chart with centered label + sub-label. Theme-aware text colors."""
     SIZE   = 170
-    STROKE = 26
+    STROKE = 24
 
     def __init__(self, parent, bg_color, **kw):
         super().__init__(parent, width=self.SIZE, height=self.SIZE,
@@ -103,23 +103,29 @@ class DonutChart(Canvas):
         self._ham_color   = "#3ecf8e"
         self._spam_color  = "#f05454"
         self._track_color = "#2d3a58"
-        self._label_text  = ""
-        self._sub_text    = ""
+        self._subtext_color = "#7d8590"   # FIX: store and update with theme
+        # label/sub are stored separately (no \n hack)
+        self._main_label  = ""   # e.g. "Spam"
+        self._pct_label   = ""   # e.g. "83.99%"
+        self._sub_text    = ""   # e.g. "confidence"
         self._visible     = False
         self._draw()
 
-    def update_colors(self, bg, track, ham_c, spam_c):
-        self._bg_color    = bg
-        self._track_color = track
-        self._ham_color   = ham_c
-        self._spam_color  = spam_c
+    def update_colors(self, bg, track, ham_c, spam_c, subtext):
+        self._bg_color      = bg
+        self._track_color   = track
+        self._ham_color     = ham_c
+        self._spam_color    = spam_c
+        self._subtext_color = subtext
         self.configure(bg=bg)
         self._draw()
 
-    def set_values(self, ham_pct, spam_pct, label="", sub="", visible=True):
+    def set_values(self, ham_pct, spam_pct,
+                   main_label="", pct_label="", sub="", visible=True):
         self._ham_pct    = ham_pct
         self._spam_pct   = spam_pct
-        self._label_text = label
+        self._main_label = main_label
+        self._pct_label  = pct_label
         self._sub_text   = sub
         self._visible    = visible
         self._draw()
@@ -128,30 +134,40 @@ class DonutChart(Canvas):
         self.delete('all')
         if not self._visible:
             return
+
         s   = self.SIZE
-        pad = self.STROKE + 6
+        pad = self.STROKE + 8
         x0, y0, x1, y1 = pad, pad, s - pad, s - pad
 
-        # Track
+        # Track ring
         self.create_arc(x0, y0, x1, y1, start=0, extent=359.99,
                         outline=self._track_color, width=self.STROKE, style='arc')
 
+        # Colored segments
         total = self._ham_pct + self._spam_pct
         if total > 0:
             ham_ext  = (self._ham_pct  / total) * 359.99
             spam_ext = (self._spam_pct / total) * 359.99
             self.create_arc(x0, y0, x1, y1, start=90, extent=ham_ext,
                             outline=self._ham_color, width=self.STROKE, style='arc')
-            self.create_arc(x0, y0, x1, y1, start=90 + ham_ext, extent=spam_ext,
+            self.create_arc(x0, y0, x1, y1,
+                            start=90 + ham_ext, extent=spam_ext,
                             outline=self._spam_color, width=self.STROKE, style='arc')
 
         cx, cy = s // 2, s // 2
-        is_spam = 'SPAM' in self._label_text.upper()
-        fill = self._spam_color if is_spam else self._ham_color
-        self.create_text(cx, cy - 10, text=self._label_text,
+        is_spam  = self._main_label.upper() == 'SPAM'
+        fill     = self._spam_color if is_spam else self._ham_color
+
+        # FIX: 3 distinct lines with proper spacing
+        # Line 1: "Spam" / "Ham" label  — bold, colored
+        self.create_text(cx, cy - 18, text=self._main_label,
                          font=('Segoe UI', 13, 'bold'), fill=fill)
-        self.create_text(cx, cy + 11, text=self._sub_text,
-                         font=('Segoe UI', 9), fill='#7d8590')
+        # Line 2: percentage
+        self.create_text(cx, cy + 2, text=self._pct_label,
+                         font=('Segoe UI', 11, 'bold'), fill=fill)
+        # Line 3: sub-label  — FIX: theme-aware subtext color
+        self.create_text(cx, cy + 20, text=self._sub_text,
+                         font=('Segoe UI', 8), fill=self._subtext_color)
 
 
 # ── Loader Spinner ─────────────────────────────────────────────────────────
@@ -207,10 +223,9 @@ class SampleCard(ctk.CTkFrame):
         self._body      = body
         self._on_click  = on_click
         self._get_theme = get_theme
-        self._tag       = tag  # "SPAM" or "HAM"
+        self._tag       = tag
         self.grid_columnconfigure(1, weight=1)
 
-        # Colored pill badge
         badge_color = C["spam"] if tag == "SPAM" else C["ham"]
         self._badge = ctk.CTkLabel(
             self, text=f" {tag} ",
@@ -219,7 +234,7 @@ class SampleCard(ctk.CTkFrame):
             fg_color=badge_color,
             corner_radius=4, width=42, height=18
         )
-        self._badge.grid(row=0, column=0, padx=(10, 6), pady=(8, 2), sticky='w')
+        self._badge.grid(row=0, column=0, padx=(10, 6), pady=(8, 8), sticky='nw')
 
         short = body[:82] + "\u2026" if len(body) > 82 else body
         self._body_lbl = ctk.CTkLabel(
@@ -265,6 +280,8 @@ class SpamDetectorApp(ctk.CTk):
         self._selected_model = ctk.StringVar(value='svm')
         self._current_view   = "analysis"
         self._sample_cards   = []
+        # store last result to re-draw donut after theme switch
+        self._last_result    = None
 
         self._build_ui()
 
@@ -335,9 +352,15 @@ class SpamDetectorApp(ctk.CTk):
         # sample cards
         for card in self._sample_cards:
             card.repaint()
-        # donut
-        self._donut.update_colors(bg=C["card"], track=C["donut_bg"],
-                                   ham_c=C["ham"], spam_c=C["spam"])
+        # FIX: pass subtext color so donut sub-label is readable in light mode
+        self._donut.update_colors(
+            bg=C["card"], track=C["donut_bg"],
+            ham_c=C["ham"], spam_c=C["spam"],
+            subtext=C["subtext"]
+        )
+        # FIX: re-apply last result so donut redraws with new colors
+        if self._last_result:
+            self._show_result(self._last_result, _from_repaint=True)
         # spinners
         self._analyze_spinner.update_colors(bg=C["bg"], color=C["loader"])
         self._train_spinner.update_colors(bg=C["btn_sec"], color=C["loader"])
@@ -353,7 +376,6 @@ class SpamDetectorApp(ctk.CTk):
             for lbl in row:
                 lbl.configure(text_color=C["subtext"])
         self._refresh_btn.configure(fg_color=C["accent"], hover_color=C["accent_hv"])
-        # fix spinner bg for reports (inside scrollable)
         self._reports_spinner.update_colors(bg=C["bg"], color=C["loader"])
         self._cm_title_lbl.configure(text_color=C["text"])
         for lbl in self._cm_labels:
@@ -377,12 +399,10 @@ class SpamDetectorApp(ctk.CTk):
         self._sidebar.grid(row=0, column=0, sticky='nsew')
         self._sidebar.grid_propagate(False)
         self._sidebar.grid_columnconfigure(0, weight=1)
-        # FIX: explicit row heights — no weight on middle rows to prevent compression
         self._dividers = []
 
         row = 0
 
-        # Logo row
         logo_row = ctk.CTkFrame(self._sidebar, fg_color='transparent')
         logo_row.grid(row=row, column=0, padx=18, pady=(24, 2), sticky='w'); row += 1
 
@@ -409,7 +429,6 @@ class SpamDetectorApp(ctk.CTk):
         d = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
         d.grid(row=row, column=0, padx=14, sticky='ew'); self._dividers.append(d); row += 1
 
-        # Nav label
         self._nav_lbl = ctk.CTkLabel(
             self._sidebar, text="NAVIGATION",
             font=ctk.CTkFont(family='Segoe UI', size=9, weight='bold'),
@@ -440,7 +459,6 @@ class SpamDetectorApp(ctk.CTk):
         d = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
         d.grid(row=row, column=0, padx=14, pady=(12, 0), sticky='ew'); self._dividers.append(d); row += 1
 
-        # Model selector
         self._model_lbl = ctk.CTkLabel(
             self._sidebar, text="SELECT MODEL",
             font=ctk.CTkFont(family='Segoe UI', size=9, weight='bold'),
@@ -467,7 +485,6 @@ class SpamDetectorApp(ctk.CTk):
         d = ctk.CTkFrame(self._sidebar, height=1, fg_color=C["divider"])
         d.grid(row=row, column=0, padx=14, pady=(12, 0), sticky='ew'); self._dividers.append(d); row += 1
 
-        # Theme toggle
         self._theme_btn = ctk.CTkButton(
             self._sidebar, text="\U0001f319  Dark Mode",
             command=self._toggle_theme, height=34,
@@ -477,7 +494,6 @@ class SpamDetectorApp(ctk.CTk):
         )
         self._theme_btn.grid(row=row, column=0, padx=12, pady=(10, 4), sticky='ew'); row += 1
 
-        # Train + spinner
         train_row = ctk.CTkFrame(self._sidebar, fg_color='transparent')
         train_row.grid(row=row, column=0, padx=12, pady=4, sticky='ew')
         train_row.grid_columnconfigure(0, weight=1); row += 1
@@ -514,7 +530,6 @@ class SpamDetectorApp(ctk.CTk):
         self._main_frame.grid_rowconfigure(1, weight=1)
         self._main_frame.grid_columnconfigure(0, weight=1)
 
-        # Header
         self._header_frame = ctk.CTkFrame(
             self._main_frame, fg_color=C["sidebar"], height=56, corner_radius=0
         )
@@ -532,7 +547,6 @@ class SpamDetectorApp(ctk.CTk):
         self._view_analysis = self._build_analysis_view(self._main_frame)
         self._view_reports  = self._build_reports_view(self._main_frame)
 
-        # Status bar
         self._status_label = ctk.CTkLabel(
             self._main_frame, text="\u2022  Ready",
             font=ctk.CTkFont(family='Consolas', size=10),
@@ -540,7 +554,6 @@ class SpamDetectorApp(ctk.CTk):
         )
         self._status_label.grid(row=2, column=0, padx=26, pady=(2, 0), sticky='w')
 
-        # Footer
         self._footer_frame = ctk.CTkFrame(
             self._main_frame, fg_color=C["footer"], height=30, corner_radius=0
         )
@@ -571,7 +584,6 @@ class SpamDetectorApp(ctk.CTk):
         self._content_frame.grid_columnconfigure(0, weight=3)
         self._content_frame.grid_columnconfigure(1, weight=2)
 
-        # Left panel
         self._left_panel = ctk.CTkFrame(self._content_frame, fg_color=C["bg"])
         self._left_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
         self._left_panel.grid_rowconfigure(1, weight=1)
@@ -595,7 +607,6 @@ class SpamDetectorApp(ctk.CTk):
         self._text_input.bind('<FocusIn>',  self._clear_placeholder)
         self._text_input.bind('<FocusOut>', self._restore_placeholder)
 
-        # Buttons
         btn_row = ctk.CTkFrame(self._left_panel, fg_color='transparent')
         btn_row.grid(row=2, column=0, sticky='ew', pady=(10, 0))
         btn_row.grid_columnconfigure(0, weight=1)
@@ -645,12 +656,12 @@ class SpamDetectorApp(ctk.CTk):
         )
         self._model_info_label.grid(row=1, column=0, sticky='w', pady=(3, 0))
 
-        # Donut — hidden until first result
+        # Donut
         self._donut = DonutChart(self._result_card, bg_color=C["card"])
         self._donut.grid(row=0, column=1, padx=(0, 14), pady=10)
         self._donut.set_values(0, 0, visible=False)
 
-        # Right panel — sample emails
+        # Right panel
         self._right_panel = ctk.CTkFrame(self._content_frame, fg_color=C["bg"])
         self._right_panel.grid(row=0, column=1, sticky='nsew')
         self._right_panel.grid_rowconfigure(1, weight=1)
@@ -707,7 +718,6 @@ class SpamDetectorApp(ctk.CTk):
             text_color=C["subtext"]
         ).grid(row=1, column=0, sticky='w', pady=(0, 12))
 
-        # Metrics table
         self._metrics_frame = ctk.CTkFrame(
             self._scroll_frame, fg_color=C["card"],
             corner_radius=10, border_width=1, border_color=C["border"]
@@ -749,7 +759,6 @@ class SpamDetectorApp(ctk.CTk):
                 row_lbls.append(lbl)
             self._metric_rows.append(row_lbls)
 
-        # Refresh row
         ref_row = ctk.CTkFrame(self._scroll_frame, fg_color='transparent')
         ref_row.grid(row=3, column=0, sticky='w', pady=(0, 20))
 
@@ -761,7 +770,6 @@ class SpamDetectorApp(ctk.CTk):
         )
         self._refresh_btn.grid(row=0, column=0)
 
-        # FIX: use bg=C["bg"] not C["sidebar"] for spinner inside scrollable
         self._reports_spinner = LoaderSpinner(
             ref_row, bg_color=C["bg"], color=C["loader"]
         )
@@ -822,12 +830,12 @@ class SpamDetectorApp(ctk.CTk):
         self._text_input.delete('0.0', 'end')
         self._text_input.insert('0.0', body)
         self._text_input.configure(text_color=self.C["text"])
-        self._set_status("\u2022  Sample loaded — click Analyze")
+        self._set_status("\u2022  Sample loaded \u2014 click Analyze")
 
     # ── Reports logic ────────────────────────────────────────────────
     def _load_reports(self):
         if not models_exist():
-            self._set_status("\u26a0  Models not found — train first")
+            self._set_status("\u26a0  Models not found \u2014 train first")
             return
         self._set_status("\u23f3  Loading reports...")
         self._reports_spinner.start()
@@ -913,9 +921,12 @@ class SpamDetectorApp(ctk.CTk):
             self.after(0, self._analyze_spinner.stop)
             self.after(0, self._show_error, str(e))
 
-    def _show_result(self, result):
+    def _show_result(self, result, _from_repaint=False):
         C = self.C
-        self._analyze_spinner.stop()
+        if not _from_repaint:
+            self._analyze_spinner.stop()
+            self._last_result = result          # cache for theme switch
+
         label      = result['label']
         confidence = result['confidence']
         spam_prob  = result['spam_prob']
@@ -925,20 +936,25 @@ class SpamDetectorApp(ctk.CTk):
         icon  = "\U0001f6ab" if label == 'Spam' else "\u2705"
 
         self._verdict_label.configure(
-            text=f"{icon}  {label.upper()}  —  {confidence}% Confidence",
+            text=f"{icon}  {label.upper()}  \u2014  {confidence}% Confidence",
             font=ctk.CTkFont(family='Segoe UI', size=15, weight='bold'),
             text_color=color
         )
         self._model_info_label.configure(
-            text=f"Model: {model_name}   Ham: {ham_prob}%   Spam: {spam_prob}%"
+            text=f"Model: {model_name}   Ham: {ham_prob}%   Spam: {spam_prob}%",
+            text_color=C["subtext"]
         )
+        # FIX: split label/pct into separate fields for clean donut layout
         self._donut.set_values(
-            ham_pct=ham_prob, spam_pct=spam_prob,
-            label=f"{label}\n{confidence}%",
+            ham_pct=ham_prob,
+            spam_pct=spam_prob,
+            main_label=label,          # "Spam" or "Ham"
+            pct_label=f"{confidence}%",
             sub="confidence",
             visible=True
         )
-        self._set_status(f"\u2714  Done  |  Ham {ham_prob}%  |  Spam {spam_prob}%")
+        if not _from_repaint:
+            self._set_status(f"\u2714  Done  |  Ham {ham_prob}%  |  Spam {spam_prob}%")
 
     def _show_error(self, error):
         messagebox.showerror("Prediction Error", f"Prediction failed:\n{error}")
@@ -974,6 +990,7 @@ class SpamDetectorApp(ctk.CTk):
         )
         self._model_info_label.configure(text="")
         self._donut.set_values(0, 0, visible=False)
+        self._last_result = None
         self._set_status("\u2022  Ready")
 
     def _clear_placeholder(self, event):
